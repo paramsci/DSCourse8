@@ -1,0 +1,96 @@
+---
+title: "Course9_Prog_Assignment"
+author: "PNM"
+date: "October 17, 2018"
+output: html_document
+---
+
+## Introduction
+
+This document summarizes Machine Learning for the wearable device data. Wearable devices ( fitbit, Up etc), are very popular these days with the premise of providing feedback to the user about overall activity level. But since these devices have embedded accelerometers, the data can also be fuzed to predict what activity ( walking, running, sitting, sleeping) user is performing at a given time. This raises utility of wearable devices. One such study was performed to predict the weightlifting exercise classification using wearable device data modeling ( http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har). In this exercise, we take a look at the data, apply various Machine Larning models to predict class of the activity. 
+
+
+## Data Loading and Preprocessing
+
+
+
+
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(caret)
+library(knitr)
+```
+
+Data is downloaded from website location provided, while looking at the data and doing some preliminary analysis, turns out there is a lot of missing data, which is typical of any data science problem.
+
+```{r echo=FALSE, message = FALSE, cache=TRUE}
+
+trainurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testurl  <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+download.file(url = trainurl, destfile = "traindata.csv")
+download.file(url = testurl, destfile = "testdata.csv")
+
+traindata <- read.csv("traindata.csv", na.strings = c("NA","#DIV/0!"," "))
+
+
+```
+
+## Model training and cross validation
+
+So now we have training and testing data, there are bunch of things that can be done. But first of all we need to make sure that data is tidy.There are a lot of columns for which there is no data - i.e entire columns are missing. These columns do not provide any information for model building and hence should be removed. Similarly, there are variables in the dataset which are purely indicator variables and do not contribute to prediction, these variables should also be removed. At the outset, training data is further divided in training and testing data ( subtrain1 and subtest1), to pick the best model for the actual data prediction. Using 80/20 split, training data segment within original training data is used for 3 methods - Decision Tree, K- nearest neighbors and Random forests. Furthermore, repeated cross validation is selected using 5 segments and 5 repetations. 
+
+```{r, warning= FALSE, cache= TRUE}
+
+traindata1 <- traindata[, colSums(is.na(traindata)) == 0]
+traindata1 <- traindata1[,-c(1:7)]
+ind1 <- createDataPartition(y = traindata1$classe, p = 0.8, list = FALSE)
+
+subtrain1 <- traindata1[ind1,]
+subtest1  <- traindata1[-ind1,]
+
+trainingParam  <- trainControl(method = "repeatedcv" , number = 5 , repeats = 5)
+
+fitDT <- train(classe ~ . , data = subtrain1 ,method = "rpart",trControl = trainingParam)
+
+fitRF <- train(classe ~ . , data = subtrain1 ,method = "rf",trControl = trainingParam)
+
+fitKNN <- train(classe ~ . , data = subtrain1 ,method = "knn",trControl = trainingParam)
+
+
+predictDT <- predict(fitDT, newdata = subtest1)
+
+predictRF <- predict(fitRF, newdata = subtest1)
+
+predictKNN <- predict(fitKNN, newdata = subtest1)
+
+accDT <- confusionMatrix(predictDT, subtest1$classe)[[3]][[1]]
+
+accRF <- confusionMatrix(predictRF, subtest1$classe)[[3]][[1]]
+
+accKNN <- confusionMatrix(predictKNN, subtest1$classe)[[3]][[1]]
+
+dF <- data.frame(Method = c("Decision Tree", "Random Forest", "K - Nearest Neighbors"),
+                 Accuracy = c(accDT,accRF, accKNN))
+
+```
+This exercise yields important information about applicable model for THIS problem. Random Forest naturally emerge as a best candidate. Here is the comparison between used models. 
+
+```{r,cache=TRUE,echo=FALSE}
+knitr::kable(dF)
+```
+
+## Prediction of Test dataset using selected model
+
+Now we are in a better position of using selected model (Random Forest) for prediction of the test cases. We need to make sure that our test data went through same data cleaning operation as the training data. 
+```{r, cache=TRUE, echo=TRUE}
+testdata <- read.csv("testdata.csv", na.strings = c("NA","#DIV/0!"," "))
+testdata <- testdata[, colSums(is.na(testdata)) == 0]
+testdata <- testdata[,-c(1:7)]
+testdata <- testdata %>% select(-problem_id) 
+predictTest <- predict(fitRF,newdata = testdata)
+predictTest
+```
+
